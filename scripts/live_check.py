@@ -186,6 +186,19 @@ def _():
     assert call("company_resolve", query="Visa")["company"]["ticker"] == "V"
 
 
+@check("XOM: CIK가 바뀐 회사는 옛 CIK를 안내한다(공시가 이어지는지 확인)")
+def _():
+    b = call("fin_trend", company="XOM", period="annual")
+    if len(b["rows"]) < 5:
+        assert b["meta"].get("older_cik", {}).get("cik") == "34088", b["meta"]
+
+
+@check("earnings TSLA: 2.02로 낸 인도 실적이 아니라 분기 실적 보도자료를 고른다")
+def _():
+    b = call("earnings_release", company="TSLA", max_chars=3000)
+    assert ms.looks_like_results(b["text"]), b["filing"]
+
+
 @check("concept MSFT R&D 연간 + 후보 찾기")
 def _():
     b = call("fin_concept", company="MSFT", concept="ResearchAndDevelopmentExpense", duration="annual", limit=3)

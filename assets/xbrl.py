@@ -395,23 +395,32 @@ def _instant(facts: dict, tags: tuple[str, ...], accn: str, at: str, foreign: bo
 
 
 def _add_unfunded_provision(facts: dict, accn: str, pend: str, annual: bool, metrics: dict, tax: str) -> None:
-    """CECL 이후 은행은 대손 전입을 대출분과 미사용 약정분 태그로 나눠 싣는다. 대출분만 잡혔으면 둘을 더해 총액으로 맞춘다(BAC)."""
+    """CECL 이후 은행은 대손 전입을 대출분과 미사용 약정분 태그로 나눠 싣는다. 대출분만 잡혔으면 둘을 더해 총액으로 맞춘다(BAC).
+    같은 기간 값이 있는 칸만 더하고, 하나라도 더하지 못한 칸이 있으면 그 칸에 표시해 섞인 비교를 막는다."""
     m = metrics.get("provision_credit_losses")
     if not m or not m["tag"].endswith("FinancingReceivableExcludingAccruedInterestCreditLossExpenseReversal"):
         return
     g = facts.get("facts", {}).get(tax, {}).get("OffBalanceSheetCreditLossLiabilityCreditLossExpenseReversal")
     if not g:
         return
-    vals = [f for f in g.get("units", {}).get("USD", []) if f.get("accn") == accn]
-    for slot in ("current", "prior", "ytd", "ytd_prior"):
+    vals = g.get("units", {}).get("USD", [])
+    added = 0
+    for slot in ("current", "prior", "ytd", "ytd_prior", "prev_quarter", "q4", "q4_prior"):
         e = m.get(slot)
-        if not e:
+        if not e or e.get("derived") and slot.startswith("q4"):
+            if e and slot.startswith("q4"):
+                e["note"] = "대출분만의 계산값입니다(미사용 약정분 미포함)"
             continue
-        add = next((f for f in vals if f.get("start") == e.get("start") and f["end"] == e["end"]), None)
+        add = max((f for f in vals if f.get("start") == e.get("start") and f["end"] == e["end"]),
+                  key=lambda f: f["filed"], default=None)
         if add:
             e["val"] += add["val"]
             e["derived"] = "대출분 + 미사용 약정분"
-    m["label"] = "대손충당금 전입(대출분 + 미사용 약정분)"
+            added += 1
+        else:
+            e["note"] = "미사용 약정분 값이 없어 대출분만입니다. 다른 칸과 비교할 때 주의하세요"
+    if added:
+        m["label"] = "대손충당금 전입(대출분 + 미사용 약정분)"
 
 
 TEMP_EQUITY = ("TemporaryEquityCarryingAmountIncludingPortionAttributableToNoncontrollingInterests",
@@ -546,24 +555,29 @@ def ratios(m: dict, annual: bool, sector: str | None = None) -> dict:
 # ── 추이 ───────────────────────────────────────────────────────────────────
 
 def _series_raw(facts: dict, key: str, foreign: bool, tax: str | None = None) -> tuple[dict[tuple, dict], list[str]]:
-    """기간(start, end) → 값. 같은 기간에 여러 태그가 있으면 가장 나중에 낸 공시가 쓴 태그를 고른다
-    (회사가 태그를 바꾸면 다음 공시가 비교 기간까지 새 태그로 다시 싣기 때문이다. COST·O 사례). 매출만은 한 태그가
-    5% 넘게 크면 그 합계를 쓴다(보험·은행의 일부 매출 태그). 쓴 태그를 값마다 남긴다."""
+    """기간(start, end) → 값. 같은 태그 안에서는 가장 나중에 낸 값(정정 반영)을 쓴다.
+    태그 사이에서는 '가장 최근 기간을 실은 태그'(기준 태그)를 모든 기간에 먼저 쓰고, 그 태그에 값이 없는 기간만
+    우선순위대로 채운다. 회사가 태그를 바꾸면 다음 공시가 비교 기간까지 새 태그로 다시 싣기 때문에 정의가 이어지고(O),
+    다른 표의 태그(현금흐름표의 제한 현금 포함 현금)가 기간마다 섞이지 않는다(COST). 매출은 한 태그가 5% 넘게 크면 그 합계를 쓴다."""
     pick_max = key in PICK_MAX
-    per: dict[tuple, list[dict]] = {}
+    order: list[str] = []
+    per: dict[tuple, dict[str, dict]] = {}
     for tag, unit, _inacc, allv in candidates(facts, key, None, foreign, tax):
-        latest: dict[tuple, dict] = {}
+        order.append(tag)
         for f in allv:
             k = (f.get("start"), f["end"])
-            if k not in latest or f["filed"] > latest[k]["filed"]:
-                latest[k] = {**f, "tag": tag, "unit": unit}
-        for k, f in latest.items():
-            per.setdefault(k, []).append(f)
+            cur = per.setdefault(k, {}).get(tag)
+            if cur is None or f["filed"] > cur["filed"]:
+                per[k][tag] = {**f, "tag": tag, "unit": unit}
+    if not per:
+        return {}, []
+    latest_end = max(k[1] for k in per)
+    dominant = next((t for t in order if any(t in v for k, v in per.items() if k[1] == latest_end)), order[0])
     merged: dict[tuple, dict] = {}
-    for k, fs in per.items():
-        best = max(fs, key=lambda f: f["filed"])
+    for k, by_tag in per.items():
+        best = by_tag.get(dominant) or next(by_tag[t] for t in order if t in by_tag)
         if pick_max:
-            big = max(fs, key=lambda f: abs(f["val"]))
+            big = max(by_tag.values(), key=lambda f: abs(f["val"]))
             if abs(big["val"]) > abs(best["val"]) * 1.05:
                 best = big
         merged[k] = best
@@ -598,7 +612,7 @@ def trend(facts: dict, keys: list[str], mode: str, count: int, fye: str | None, 
                 if kind(days(f)) == "annual":
                     by_end[e] = {"val": f["val"], "tag": f["tag"], "days": days(f)}
         else:
-            by_end = _quarters(raw, additive=(typ == "flow"))
+            by_end = _quarters(raw, additive=(typ == "flow"), cross_tag=key in COMPARABLE_ACROSS_TAGS)
         cols[key] = by_end
     flow_ends = {e for k, c in cols.items() if METRIC[k][2] != "stock" for e in c}
     ends = sorted(flow_ends or {e for c in cols.values() for e in c}, reverse=True)
@@ -685,7 +699,7 @@ def _lookup(col: dict[str, dict], end: str, tol: int = 10) -> dict | None:
     return best[1] if best else None
 
 
-def _quarters(raw: dict[tuple, dict], additive: bool) -> dict[str, dict]:
+def _quarters(raw: dict[tuple, dict], additive: bool, cross_tag: bool = False) -> dict[str, dict]:
     """단독 분기 값. 공시된 3개월(12~16주 포함) 값을 먼저 쓰고, 없으면 누적에서 뺀다(additive일 때만, 같은 태그끼리만).
 
     Q2 = 6개월 − Q1, Q3 = 9개월 − 6개월(또는 − Q1 − Q2), Q4 = 연간 − 9개월(또는 − Q1 − Q2 − Q3).
@@ -703,13 +717,16 @@ def _quarters(raw: dict[tuple, dict], additive: bool) -> dict[str, dict]:
         if k in by_kind:
             by_kind[k].append(f)
 
+    def same(a: str, b: str) -> bool:
+        return cross_tag or a == b
+
     def q_in(start: str, before: str, tag: str) -> list[dict]:
-        return sorted((v | {"end": e} for e, v in q.items() if v.get("start") and v["tag"] == tag and
+        return sorted((v | {"end": e} for e, v in q.items() if v.get("start") and same(v["tag"], tag) and
                        dt.date.fromisoformat(start) - dt.timedelta(days=3) <= dt.date.fromisoformat(v["start"])
                        and e < before and not near(e, before, 5)), key=lambda x: x["end"])
 
     def ytd_at(k: str, start: str, end_lt: str, tag: str) -> dict | None:
-        return max((f for f in by_kind[k] if f["tag"] == tag and near(f["start"], start, 3) and f["end"] < end_lt
+        return max((f for f in by_kind[k] if same(f["tag"], tag) and near(f["start"], start, 3) and f["end"] < end_lt
                     and not near(f["end"], end_lt, 5)), key=lambda f: f["end"], default=None)
 
     for k_total, k_prev, n_prev in (("h1", None, 1), ("m9", "h1", 2), ("annual", "m9", 3)):

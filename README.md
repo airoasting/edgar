@@ -50,8 +50,10 @@ claude mcp add --scope user edgar -- python3 "$PWD/assets/mcp_server.py"
 ```
 
 ```bash
-ln -s "$PWD" ~/.claude/skills/edgar
+mkdir -p ~/.claude/skills && ln -s "$PWD" ~/.claude/skills/edgar
 ```
+
+이미 `~/.claude/skills/edgar` 폴더가 있으면 먼저 지우거나 옮긴 뒤 실행합니다. 그대로 두면 링크가 그 폴더 안에 생겨 스킬이 등록되지 않습니다.
 
 등록한 뒤 Claude Code를 다시 시작하고 "애플 이번 분기 실적 어땠어?"처럼 물으면 됩니다. 처음 한 번은 이름과 이메일을 묻고, 저장한 뒤 바로 답합니다.
 
@@ -105,7 +107,7 @@ assets/reader.py             공시 본문 읽기 (색인, HTML 변환, 항목 �
 assets/ownership.py          Form 4 요약, 13F 비교
 assets/http_compat.py        requests가 없을 때 쓰는 대체 모듈 (DART와 같은 파일)
 assets/thumbnail.html·.png   README 썸네일
-tests/                       오프라인 테스트 55개 (네트워크 없이 실행)
+tests/                       오프라인 테스트 65개 (네트워크 없이 실행)
 scripts/live_check.py        실제 SEC 데이터로 하는 점검
 evals/                       답변 품질 평가 질문과 발동 점검 질문
 docs/QUALITY.md              10점 기준, 핵심 질문 12개, 감점 사례

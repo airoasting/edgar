@@ -348,6 +348,11 @@ class TestFinancials(Base):
         self.assertIn("fallback", body["meta"])
         self.assertIn("latest_filing_url", body["filing"])
 
+    def test_next_period_only_for_latest_filing_aapl(self):
+        self.fake()
+        body = self.ok("fin_key_accounts", company="TST", fiscal_year="2026", fiscal_period="Q3")
+        self.assertNotIn("next_period", body["meta"])                        # 과거·지정 공시에 '아직 공시 전'을 붙이지 않는다
+
     def test_newer_earnings_release_is_flagged_met(self):
         c = self.fake()
         rec = c.subs["filings"]["recent"]
@@ -452,6 +457,14 @@ class TestTrend(Base):
         q = xbrl._quarters(raw, additive=True)
         self.assertEqual(xbrl._weeks(q["2026-08-30"]["days"]), 16)
 
+    def test_dominant_tag_keeps_definition_consistent_cost(self):
+        facts = {"facts": {"us-gaap": {
+            "CashAndCashEquivalentsAtCarryingValue": usd(fact(10, "2026-08-30", "k", form="10-K"), fact(9, "2025-08-31", "k", form="10-K")),
+            "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents": usd(
+                fact(12, "2025-08-31", "k", form="10-K", filed="2026-10-10"), fact(11, "2024-09-01", "j", form="10-K"))}}}
+        raw, used = xbrl._series_raw(facts, "cash", False)
+        self.assertEqual(raw[(None, "2025-08-31")]["val"], 9)               # 기준 태그(가장 최근 기간)를 먼저 쓴다
+
     def test_fiscal_label(self):
         cases = [("2026-09-26", "0926", "FY2026 Q4"), ("2025-12-27", "0926", "FY2026 Q1"),
                  ("2026-07-26", "0125", "FY2027 Q2"), ("2026-01-25", "0125", "FY2026 Q4"),
@@ -498,6 +511,24 @@ class TestReader(Base):
         span = reader.find_section(tenq, "1", None, reader.part2_start(tenq))
         self.assertIn("litigation", tenq[span[0]:span[1]])
         self.assertNotIn("Balance sheet", tenq[span[0]:span[1]])
+
+    def test_results_detection_tsla(self):
+        self.assertFalse(ms.looks_like_results("Tesla Third Quarter Production, Deliveries. ... net income disclaimer"))
+        self.assertTrue(ms.looks_like_results("Revenue of $96.2 billion, net income of $59.7 billion"))
+
+    def test_short_titled_section_is_kept_msft(self):
+        tenq = "\n".join(["PART I", "Item 1. Financial Statements", "Numbers. " * 80, "PART II",
+                          "Item 1. Legal Proceedings", "Refer to Note 13 for information regarding legal proceedings. " * 2,
+                          "Item 1A. Risk Factors", "Risks. " * 60])
+        span = reader.find_section(tenq, "1", None, 0, r"legal\s+proceedings")
+        self.assertIn("Note 13", tenq[span[0]:span[1]])
+
+    def test_concept_quarter_fills_from_ytd_aapl(self):
+        self.fake()
+        body = self.ok("fin_concept", company="TST", concept="NetCashProvidedByUsedInOperatingActivities", duration="quarter")
+        self.assertTrue(any(r.get("derived") for r in body["rows"]))
+        body = self.ok("fin_concept", company="TST", concept="ResearchAndDevelopmentExpense")
+        self.assertEqual(ms.CONCEPT_SYNONYMS["buyback"], "repurchase")
 
     def test_index_and_pick(self):
         docs = reader.parse_index(INDEX_HTML)
@@ -602,6 +633,37 @@ class TestOwnership(Base):
         self.assertEqual(x["transactions"][0]["cover_shares"], 1337)
         s = own.summarize_insiders([{"owners": [{"name": "Taneja"}], "transactions": x["transactions"]}], 90)
         self.assertEqual(s["sellers"][0]["shares"], 2399 - 1337)            # 세금용을 뺀 나머지는 장내 매도
+
+    def test_shared_cover_footnote_is_split_across_lines_red(self):
+        xml = form4(footnote="The reporting person sold 1,337 shares to cover tax withholding.", plan="true")
+        xml = xml.replace("</nonDerivativeTransaction></nonDerivativeTable>",
+                          "</nonDerivativeTransaction>" + xml[xml.index("<nonDerivativeTransaction>"):xml.index("</nonDerivativeTable>")]
+                          + "</nonDerivativeTable>")
+        txs = own.parse_form4(xml)["transactions"]
+        self.assertEqual([t["cover_shares"] for t in txs], [1337, None])     # 동사가 앞에 와도 읽고, 첫 줄에만 배분
+        s = own.summarize_insiders([{"owners": [{"name": "X"}], "transactions": txs}], 90)
+        self.assertEqual(s["sellers"][0]["shares"], 2399 * 2 - 1337)
+
+    def test_preferred_stock_is_not_common(self):
+        t = {"security": "Series A Preferred Stock", "date": TODAY, "code": "P", "derivative": False, "shares": 10, "price": 1}
+        self.assertEqual(own.summarize_insiders([{"owners": [{"name": "X"}], "transactions": [t]}], 90)["distinct_buyers"], 0)
+
+    def test_split_rules_red(self):
+        row = lambda v, sh: {"issuer": "X CORP", "cusip": "000000000", "put_call": None, "value": v, "shares": sh}  # noqa: E731
+        self.assertIsNone(own._split_ratio(row(1700, 20), row(1000, 10)))   # 정확히 2배 샀고 주가 15% 하락: 매수
+        self.assertEqual(own._split_ratio(row(100, 1), row(100, 10)), -10)  # 1:10 역분할
+        self.assertEqual(own._split_ratio(row(2000, 20), row(1000, 10)), None)
+
+    def test_13f_name_match_is_exact(self):
+        cur = [{"issuer": "BANK OF AMERICA CORP", "cusip": "060505104", "put_call": None, "value": 1, "shares": 1}]
+        prev = [{"issuer": "BANK OF NEW YORK MELLON", "cusip": "064058100", "put_call": None, "value": 1, "shares": 1}]
+        d = own.diff_13f(cur, prev)
+        self.assertEqual((len(d["new"]), len(d["exited"]), d["cusip_changed"]), (1, 1, []))
+
+    def test_prn_and_shares_are_not_added(self):
+        rows = [{"issuer": "X", "class": "COM", "cusip": "123456100", "put_call": None, "value": 1, "shares": 10, "share_type": "SH"},
+                {"issuer": "X", "class": "NOTE", "cusip": "123456AB0", "put_call": None, "value": 1, "shares": 1000, "share_type": "PRN"}]
+        self.assertEqual(len(own.by_issuer(rows)), 2)
 
     def test_warrants_are_not_stock(self):
         t = {"security": "Warrants (right to buy Common Stock)", "date": TODAY, "code": "P", "derivative": True,

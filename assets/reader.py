@@ -220,7 +220,8 @@ def find_section(text: str, key: str, subhead: str | None = None, start_at: int 
         end = next((p for p, k2, _t in heads[i + 1:] if k2 != k), len(text))
         if best is None or end - pos > best[1] - best[0]:
             best = (pos, end)
-    if best and best[1] - best[0] < 300:     # 목차 한 줄뿐이면 실패로 본다
+    # 목차 한 줄뿐이면 실패로 본다. 제목이 맞는 구간은 짧아도 받는다(MSFT 10-Q 소송 항목은 "Note 13 참조" 203자)
+    if best and best[1] - best[0] < (120 if title else 300):
         return None
     if best and subhead:
         m = re.compile(rf"(?im)^[ \t|]*(?:[a-z]\.\s*)?{subhead}\b").search(text, best[0], best[1])
