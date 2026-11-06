@@ -1,0 +1,67 @@
+{
+  "skill_name": "edgar",
+  "note": "docs/QUALITY.md 핵심 질문 12개 중 9개를 답 장면으로 잰다. 기대값은 2026-11-06 SEC 실측(scripts/live_check.py와 같은 날). 새 공시가 나오면 기준 기간과 값이 바뀌니 다시 잰다. 질문 2(4분기)와 9(13F)는 시즌을 타므로 날짜를 함께 고친다.",
+  "evals": [
+    {"id": 1, "name": "nvda-latest-quarter", "prompt": "엔비디아 이번 분기 실적 어땠어? 전년이랑 직전 분기 대비도.",
+     "expected_output": "FY2027 2분기(2026-07-26 끝, 10-Q) 매출 962.2억 달러, 전년 같은 분기 대비 +105.9%, 직전 분기 대비 +17.9%, 원문 링크, 투자 의견 없음",
+     "assertions": [
+       {"id": "fiscal", "text": "회계 분기 FY2027 Q2와 기간 끝 2026-07-26을 밝힌다"},
+       {"id": "rev", "text": "매출 962.2억 달러(또는 96.2B)를 제시한다"},
+       {"id": "yoy", "text": "전년 같은 분기 대비 +105.9% 안팎을 제시한다"},
+       {"id": "qoq", "text": "직전 분기 대비 +17.9% 안팎을 제시한다"},
+       {"id": "ytd_label", "text": "현금흐름을 말하면 누적(6개월)이라고 밝힌다"},
+       {"id": "link", "text": "SEC 원문 링크를 붙인다"},
+       {"id": "no_advice", "text": "매수·매도 의견이나 주가 전망을 하지 않는다"}]},
+    {"id": 2, "name": "aapl-q4", "prompt": "애플 4분기 실적 알려줘",
+     "expected_output": "FY2026 4분기(2026-06-28~09-26) 매출 1,144.8억 달러(+11.7%), 연간 − 9개월 누적으로 계산했다고 밝힘, 연간 4,788억을 4분기라고 하지 않음",
+     "assertions": [
+       {"id": "q4", "text": "4분기 매출 1,144.8억 달러 안팎을 제시한다"},
+       {"id": "derived", "text": "연간 − 9개월(3분기) 누적으로 계산한 값이라고 밝힌다"},
+       {"id": "not_annual", "text": "연간 매출 4,788억 달러를 4분기 실적이라고 말하지 않는다"},
+       {"id": "eps", "text": "4분기 EPS를 빼기로 만들어 내지 않는다(없다고 하거나 실적 발표문을 가리킨다)"}]},
+    {"id": 3, "name": "aapl-trend", "prompt": "애플 최근 8분기 매출 추이 표로",
+     "expected_output": "fin_trend 8개 분기, 4분기 2개는 계산값 표시, 회계 분기 라벨",
+     "assertions": [
+       {"id": "eight", "text": "분기 8개를 빠짐없이 보여 준다(7~9월 분기 포함)"},
+       {"id": "label", "text": "회사 회계 분기(FY2026 Q4 등)로 라벨을 붙인다"},
+       {"id": "derived", "text": "4분기 값이 계산값임을 표시한다"}]},
+    {"id": 4, "name": "jpm-bank", "prompt": "JP모건 최근 분기 영업이익률이랑 부채비율",
+     "expected_output": "은행은 영업이익·부채비율이 뜻이 없다고 설명하고 순이자이익·세전이익을 대신 제시",
+     "assertions": [
+       {"id": "explain", "text": "은행이라 영업이익·부채비율을 쓰지 않는다고 설명한다"},
+       {"id": "nii", "text": "순이자이익(270.4억 달러 안팎) 또는 세전이익을 대신 제시한다"},
+       {"id": "no_fill", "text": "영업이익률이나 부채비율 숫자를 만들어 내지 않는다"}]},
+    {"id": 5, "name": "tsm-last-year", "prompt": "TSMC 작년 실적",
+     "expected_output": "최신 20-F(FY2025)의 숫자가 아직 SEC 데이터에 없어 FY2024를 썼다고 밝힘, TWD 단위, 원문 링크",
+     "assertions": [
+       {"id": "fallback", "text": "최신 20-F 숫자가 아직 반영되지 않아 직전 연도 숫자를 썼다고 밝힌다"},
+       {"id": "currency", "text": "통화를 대만 달러(TWD)로 밝힌다"},
+       {"id": "no_claim_latest", "text": "FY2024 숫자를 작년(FY2025) 실적이라고 말하지 않는다"}]},
+    {"id": 6, "name": "tsla-insiders", "prompt": "테슬라 임원들 최근 1년 동안 주식 팔았어?",
+     "expected_output": "장내 매도 3명 약 8,228만 달러, 68.9%가 10b5-1 계획 매도, 보상 관련 거래 분리, 신호 판정 없음",
+     "assertions": [
+       {"id": "sellers", "text": "장내 매도한 사람 수(3명)와 금액(약 8,200만 달러)을 제시한다"},
+       {"id": "plan", "text": "10b5-1 계획 매도 비중(약 69%)을 밝힌다"},
+       {"id": "comp", "text": "옵션 행사·세금 납부용 매도를 일반 매도와 분리한다"},
+       {"id": "no_signal", "text": "'악재', '매도 신호' 같은 판정을 하지 않는다"}]},
+    {"id": 7, "name": "brk-13f", "prompt": "버크셔가 지난 분기에 뭘 사고 팔았어?",
+     "expected_output": "2026-06-30 기준 13F, 신규 1·전량 매도 1·증가 7·감소 6, 9월 말 기준 13F는 11-14까지 공개 예정",
+     "assertions": [
+       {"id": "period", "text": "13F 기준일(2026-06-30)과 공개 시점 차이를 밝힌다"},
+       {"id": "changes", "text": "신규·전량 매도·늘림·줄임 종목을 구체적으로 든다"},
+       {"id": "next", "text": "다음 13F(9월 말 기준)가 11월 14일까지 나온다고 알린다"},
+       {"id": "scope", "text": "13F는 미국 상장 주식 롱 포지션만 담는다고 밝힌다"}]},
+    {"id": 8, "name": "aapl-china-risk", "prompt": "애플 10-K 위험 요인에서 중국 관련 내용 요약해줘",
+     "expected_output": "filing_read(section=risk, query=China) 스니펫 근거 요약, 원문 링크, 인용은 짧게",
+     "assertions": [
+       {"id": "section", "text": "최신 10-K의 위험 요인(Item 1A)에서 가져왔다고 밝힌다"},
+       {"id": "grounded", "text": "요약 내용이 스니펫 근거와 맞고 지어낸 내용이 없다"},
+       {"id": "link", "text": "10-K 원문 링크를 붙인다"}]},
+    {"id": 9, "name": "kb-routing", "prompt": "KB금융 작년 순이익 알려줘",
+     "expected_output": "DART를 먼저 쓰거나, EDGAR 20-F를 쓰면 원화·IFRS 차이와 출처를 밝힘",
+     "assertions": [
+       {"id": "route", "text": "DART 스킬을 먼저 쓰거나, 20-F를 쓴 이유와 출처를 밝힌다"},
+       {"id": "currency", "text": "원화 기준임을 밝힌다"},
+       {"id": "no_mix", "text": "DART와 20-F 숫자를 한 표에 섞지 않는다"}]}
+  ]
+}

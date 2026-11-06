@@ -1,0 +1,19 @@
+{
+  "note": "발동 판단 점검용. dart 스킬과 겹치지 않는지 함께 본다.",
+  "queries": [
+    {"query": "애플 이번 분기 실적 어땠어?", "should_trigger": true},
+    {"query": "NVDA 10-Q 매출 성장률", "should_trigger": true},
+    {"query": "테슬라 5년 매출 추이", "should_trigger": true},
+    {"query": "MSFT 가이던스 뭐라고 했어", "should_trigger": true},
+    {"query": "버크셔 지난 분기 포트폴리오 변화", "should_trigger": true},
+    {"query": "국민연금이 미국 주식 뭐 들고 있어?", "should_trigger": true},
+    {"query": "엔비디아 내부자 매도 있었어?", "should_trigger": true},
+    {"query": "going concern 언급한 8-K 찾아줘", "should_trigger": true},
+    {"query": "/edgar AAPL", "should_trigger": true},
+    {"query": "삼성전자 최대주주 지분율", "should_trigger": false, "note": "dart"},
+    {"query": "카카오 3분기 실적 리포트 만들어줘", "should_trigger": false, "note": "dart"},
+    {"query": "애플 주가 지금 얼마야", "should_trigger": false, "note": "시세"},
+    {"query": "빅테크 7개 PER 비교표 만들어줘", "should_trigger": false, "note": "여러 종목 비교 리포트"},
+    {"query": "미국 금리 인상 전망", "should_trigger": false, "note": "공시 아님"}
+  ]
+}
